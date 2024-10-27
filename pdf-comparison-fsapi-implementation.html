@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Comparison Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-4">PDF Comparison Tool</h1>
+        <form id="folderForm" class="space-y-4">
+            <div>
+                <label for="sourceFolder" class="block text-sm font-medium text-gray-700">Source Folder:</label>
+                <button id="sourceFolder" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    Select Source Folder
+                </button>
+            </div>
+            <div>
+                <label for="compareFolder" class="block text-sm font-medium text-gray-700">Compare Folder:</label>
+                <button id="compareFolder" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    Select Compare Folder
+                </button>
+            </div>
+            <div>
+                <label for="destFolder" class="block text-sm font-medium text-gray-700">Destination Folder:</label>
+                <button id="destFolder" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    Select Destination Folder
+                </button>
+            </div>
+            <button type="submit" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Run Comparison
+            </button>
+        </form>
+        <div id="output" class="mt-8">
+            <h2 class="text-xl font-semibold mb-2">Output:</h2>
+            <pre id="outputContent" class="bg-gray-100 p-4 rounded-md whitespace-pre-wrap"></pre>
+        </div>
+    </div>
+
+    <script>
+        let sourceFolderHandle, compareFolderHandle, destFolderHandle;
+
+        async function getDirectoryHandle(buttonId) {
+            try {
+                const handle = await window.showDirectoryPicker();
+                document.getElementById(buttonId).textContent = handle.name;
+                return handle;
+            } catch (err) {
+                console.error(err);
+                return null;
+            }
+        }
+
+        document.getElementById('sourceFolder').addEventListener('click', async (e) => {
+            e.preventDefault();
+            sourceFolderHandle = await getDirectoryHandle('sourceFolder');
+        });
+
+        document.getElementById('compareFolder').addEventListener('click', async (e) => {
+            e.preventDefault();
+            compareFolderHandle = await getDirectoryHandle('compareFolder');
+        });
+
+        document.getElementById('destFolder').addEventListener('click', async (e) => {
+            e.preventDefault();
+            destFolderHandle = await getDirectoryHandle('destFolder');
+        });
+
+        async function getPdfFiles(folderHandle) {
+            const pdfFiles = [];
+            for await (const entry of folderHandle.values()) {
+                if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.pdf')) {
+                    pdfFiles.push(entry);
+                }
+            }
+            return pdfFiles;
+        }
+
+        async function getPdfPageCount(fileHandle) {
+            const file = await fileHandle.getFile();
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+            return pdf.numPages;
+        }
+
+        function getSequenceMatchRatio(str1, str2) {
+            const len1 = str1.length;
+            const len2 = str2.length;
+            const matrix = Array(len1 + 1).fill().map(() => Array(len2 + 1).fill(0));
+
+            for (let i = 1; i <= len1; i++) {
+                for (let j = 1; j <= len2; j++) {
+                    if (str1[i - 1] === str2[j - 1]) {
+                        matrix[i][j] = matrix[i - 1][j - 1] + 1;
+                    } else {
+                        matrix[i][j] = Math.max(matrix[i - 1][j], matrix[i][j - 1]);
+                    }
+                }
+            }
+
+            const matchingChars = matrix[len1][len2];
+            return (2.0 * matchingChars) / (len1 + len2);
+        }
+
+        async function compareAndMovePdfs(sourcePdfs, comparePdfs, destFolderHandle) {
+            const matches = [];
+            const comparePdfNames = comparePdfs.map(pdf => pdf.name.split('.')[0]);
+
+            for (const sourcePdf of sourcePdfs) {
+                const sourceName = sourcePdf.name.split('.')[0];
+                let bestMatch = null;
+                let highestRatio = 0;
+
+                for (let i = 0; i < comparePdfNames.length; i++) {
+                    const compareName = comparePdfNames[i];
+                    const ratio = getSequenceMatchRatio(sourceName, compareName);
+                    if (ratio > 0.9 && ratio > highestRatio) {
+                        highestRatio = ratio;
+                        bestMatch = comparePdfs[i];
+                    }
+                }
+
+                if (bestMatch) {
+                    const sourcePages = await getPdfPageCount(sourcePdf);
+                    const comparePages = await getPdfPageCount(bestMatch);
+
+                    if (sourcePages === comparePages) {
+                        const sourceFile = await sourcePdf.getFile();
+                        const destFileHandle = await destFolderHandle.getFileHandle(sourcePdf.name, { create: true });
+                        const writable = await destFileHandle.createWritable();
+                        await writable.write(sourceFile);
+                        await writable.close();
+
+                        matches.push({
+                            source: sourcePdf.name,
+                            compare: bestMatch.name,
+                            destination: sourcePdf.name
+                        });
+                    }
+                }
+            }
+
+            return matches;
+        }
+
+        document.getElementById('folderForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!sourceFolderHandle || !compareFolderHandle || !destFolderHandle) {
+                alert('Please select all folders before running the comparison.');
+                return;
+            }
+
+            const outputContent = document.getElementById('outputContent');
+            outputContent.textContent = 'Processing...';
+
+            try {
+                const sourcePdfs = await getPdfFiles(sourceFolderHandle);
+                const comparePdfs = await getPdfFiles(compareFolderHandle);
+
+                const matches = await compareAndMovePdfs(sourcePdfs, comparePdfs, destFolderHandle);
+
+                let output = '';
+                for (const match of matches) {
+                    output += `Source: ${match.source}\n`;
+                    output += `Compare: ${match.compare}\n`;
+                    output += `Destination: ${match.destination}\n\n`;
+                }
+
+                outputContent.textContent = output || 'No matches found.';
+
+                // Write output to a file
+                const outputFileHandle = await destFolderHandle.getFileHandle('output.txt', { create: true });
+                const writable = await outputFileHandle.createWritable();
+                await writable.write(output);
+                await writable.close();
+
+            } catch (error) {
+                console.error(error);
+                outputContent.textContent = `An error occurred: ${error.message}`;
+            }
+        });
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
+    </script>
+</body>
+</html>
