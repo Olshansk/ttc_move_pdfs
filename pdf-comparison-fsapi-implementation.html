@@ -164,6 +164,12 @@
         return (2.0 * matchingChars) / (len1 + len2);
       }
 
+      function isSizeWithinThreshold(size1, size2) {
+        const sizeDifference = Math.abs(size1 - size2);
+        const threshold = 0.02 * Math.max(size1, size2); // 2% threshold
+        return sizeDifference <= threshold;
+      }
+
       async function compareAndHandlePdfs(
         sourcePdfs,
         comparePdfs,
@@ -177,46 +183,42 @@
 
         for (const sourcePdf of sourcePdfs) {
           const sourceName = sourcePdf.name.split(".")[0];
+          const sourceFile = await sourcePdf.getFile();
+
           let bestMatch = null;
           let highestRatio = 0;
 
           for (let i = 0; i < comparePdfNames.length; i++) {
             const compareName = comparePdfNames[i];
+            const compareFile = await comparePdfs[i].getFile();
+
             const ratio = getSequenceMatchRatio(sourceName, compareName);
-            if (ratio > 0.9 && ratio > highestRatio) {
+            if (
+              ratio > 0.9 &&
+              ratio > highestRatio &&
+              isSizeWithinThreshold(sourceFile.size, compareFile.size)
+            ) {
               highestRatio = ratio;
               bestMatch = comparePdfs[i];
             }
           }
 
           if (bestMatch) {
-            const sourcePages = await getPdfPageCount(sourcePdf);
-            const comparePages = await getPdfPageCount(bestMatch);
-
-            if (sourcePages === comparePages) {
-              if (moveFiles) {
-                await moveFile(sourcePdf, destFolderHandle);
-              } else {
-                await copyFile(sourcePdf, destFolderHandle);
-              }
-
-              matches.push({
-                source: sourcePdf.name,
-                compare: bestMatch.name,
-                destination: sourcePdf.name,
-              });
+            if (moveFiles) {
+              await moveFile(sourcePdf, destFolderHandle);
+            } else {
+              await copyFile(sourcePdf, destFolderHandle);
             }
+
+            matches.push({
+              source: sourcePdf.name,
+              compare: bestMatch.name,
+              destination: sourcePdf.name,
+            });
           }
         }
 
         return matches;
-      }
-
-      async function getPdfPageCount(fileHandle) {
-        const file = await fileHandle.getFile();
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        return pdf.numPages;
       }
 
       document
