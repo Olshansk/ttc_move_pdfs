@@ -1,0 +1,12 @@
+Source: file-example_PDF_500_kB.pdf
+Compare: a-file-example_PDF_500_kB.pdf
+Destination: file-example_PDF_500_kB.pdf
+
+Source: file-sample_150kB.pdf
+Compare: a-file-sample_150kB.pdf
+Destination: file-sample_150kB.pdf
+
+Source: file-example_PDF_1MB.pdf
+Compare: a-file-example_PDF_1MB.pdf
+Destination: file-example_PDF_1MB.pdf
+

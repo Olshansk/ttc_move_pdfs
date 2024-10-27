@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>pdf_compare_move_gui</string>
+	<key>CFBundleExecutable</key>
+	<string>pdf_compare_move_gui</string>
+	<key>CFBundleIconFile</key>
+	<string>generated-61ac36cb9b88338d0af2418d9f57c20d5c761a91cc6bd1f14dc7b6ccf7da50af.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>pdf_compare_move_gui</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>pdf_compare_move_gui</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>

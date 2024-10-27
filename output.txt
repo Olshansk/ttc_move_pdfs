@@ -1,0 +1,12 @@
+Source: src_folder/file-example_PDF_500_kB.pdf
+Compare: compare_folder/a-file-example_PDF_500_kB.pdf
+Destination: dest_folder/file-example_PDF_500_kB.pdf
+
+Source: src_folder/file-sample_150kB.pdf
+Compare: compare_folder/a-file-sample_150kB.pdf
+Destination: dest_folder/file-sample_150kB.pdf
+
+Source: src_folder/file-example_PDF_1MB.pdf
+Compare: compare_folder/a-file-example_PDF_1MB.pdf
+Destination: dest_folder/file-example_PDF_1MB.pdf
+
