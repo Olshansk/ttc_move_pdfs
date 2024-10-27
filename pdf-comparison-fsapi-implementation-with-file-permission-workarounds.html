@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Comparison Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+  </head>
+  <body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
+      <h1 class="text-2xl font-bold mb-4">PDF Comparison Tool</h1>
+      <form id="folderForm" class="space-y-4">
+        <div>
+          <label
+            for="sourceFolder"
+            class="block text-sm font-medium text-gray-700"
+            >Source Folder:</label
+          >
+          <button id="sourceFolder" class="folder-button">
+            Select Source Folder
+          </button>
+        </div>
+        <div>
+          <label
+            for="compareFolder"
+            class="block text-sm font-medium text-gray-700"
+            >Compare Folder:</label
+          >
+          <button id="compareFolder" class="folder-button">
+            Select Compare Folder
+          </button>
+        </div>
+        <div>
+          <label
+            for="destFolder"
+            class="block text-sm font-medium text-gray-700"
+            >Destination Folder:</label
+          >
+          <button id="destFolder" class="folder-button">
+            Select Destination Folder
+          </button>
+        </div>
+        <div class="flex items-center">
+          <input id="moveCheckbox" type="checkbox" class="mr-2" />
+          <label for="moveCheckbox" class="text-sm font-medium text-gray-700"
+            >Move files instead of copying</label
+          >
+        </div>
+        <button type="submit" class="submit-button">Run Comparison</button>
+      </form>
+      <div id="output" class="mt-8">
+        <h2 class="text-xl font-semibold mb-2">Output:</h2>
+        <pre
+          id="outputContent"
+          class="bg-gray-100 p-4 rounded-md whitespace-pre-wrap"
+        ></pre>
+      </div>
+    </div>
+
+    <script>
+      let sourceFolderHandle, compareFolderHandle, destFolderHandle;
+
+      document.querySelectorAll(".folder-button").forEach((button) => {
+        button.addEventListener("click", async (e) => {
+          e.preventDefault();
+          try {
+            const handle = await window.showDirectoryPicker();
+            button.textContent = handle.name;
+
+            if (button.id === "sourceFolder") sourceFolderHandle = handle;
+            if (button.id === "compareFolder") compareFolderHandle = handle;
+            if (button.id === "destFolder") destFolderHandle = handle;
+          } catch (err) {
+            console.error("Directory selection failed:", err);
+          }
+        });
+      });
+
+      async function getPdfFilesRecursively(folderHandle) {
+        const pdfFiles = [];
+        async function traverseDirectory(handle) {
+          for await (const entry of handle.values()) {
+            if (
+              entry.kind === "file" &&
+              entry.name.toLowerCase().endsWith(".pdf")
+            ) {
+              pdfFiles.push(entry);
+            } else if (entry.kind === "directory") {
+              await traverseDirectory(entry);
+            }
+          }
+        }
+        await traverseDirectory(folderHandle);
+        return pdfFiles;
+      }
+
+      function isSizeWithinThreshold(size1, size2) {
+        const sizeDifference = Math.abs(size1 - size2);
+        const threshold = 0.02 * Math.max(size1, size2);
+        return sizeDifference <= threshold;
+      }
+
+      function getSequenceMatchRatio(str1, str2) {
+        const len1 = str1.length;
+        const len2 = str2.length;
+        const matrix = Array(len1 + 1)
+          .fill()
+          .map(() => Array(len2 + 1).fill(0));
+
+        for (let i = 1; i <= len1; i++) {
+          for (let j = 1; j <= len2; j++) {
+            if (str1[i - 1] === str2[j - 1]) {
+              matrix[i][j] = matrix[i - 1][j - 1] + 1;
+            } else {
+              matrix[i][j] = Math.max(matrix[i - 1][j], matrix[i][j - 1]);
+            }
+          }
+        }
+
+        return (2.0 * matrix[len1][len2]) / (len1 + len2);
+      }
+
+      async function copyOrMoveFile(
+        sourceFile,
+        destFolderHandle,
+        move = false
+      ) {
+        const source = await sourceFile.getFile();
+        const destFileHandle = await destFolderHandle.getFileHandle(
+          sourceFile.name,
+          { create: true }
+        );
+        const writable = await destFileHandle.createWritable();
+        await writable.write(await source.arrayBuffer());
+        await writable.close();
+
+        if (move) {
+          await sourceFile.remove(); // Remove the source file if moving
+        }
+      }
+
+      document
+        .querySelector(".submit-button")
+        .addEventListener("click", async (e) => {
+          e.preventDefault();
+          if (
+            !sourceFolderHandle ||
+            !compareFolderHandle ||
+            !destFolderHandle
+          ) {
+            alert("Please select all folders before running the comparison.");
+            return;
+          }
+
+          const moveFiles = document.getElementById("moveCheckbox").checked;
+          const outputContent = document.getElementById("outputContent");
+          outputContent.textContent = "Processing...";
+
+          try {
+            const sourcePdfs = await getPdfFilesRecursively(sourceFolderHandle);
+            const comparePdfs = await getPdfFilesRecursively(
+              compareFolderHandle
+            );
+
+            let output = "";
+            for (const sourcePdf of sourcePdfs) {
+              const sourceFile = await sourcePdf.getFile();
+              const sourceName = sourcePdf.name.split(".")[0];
+
+              let bestMatch = null;
+              let highestRatio = 0;
+
+              for (const comparePdf of comparePdfs) {
+                const compareFile = await comparePdf.getFile();
+                const compareName = comparePdf.name.split(".")[0];
+
+                const ratio = getSequenceMatchRatio(sourceName, compareName);
+                if (
+                  ratio > 0.9 &&
+                  isSizeWithinThreshold(sourceFile.size, compareFile.size) &&
+                  ratio > highestRatio
+                ) {
+                  highestRatio = ratio;
+                  bestMatch = comparePdf;
+                }
+              }
+
+              if (bestMatch) {
+                await copyOrMoveFile(sourcePdf, destFolderHandle, moveFiles);
+                output += `Source: ${sourcePdf.name}\nMatch: ${bestMatch.name}\n\n`;
+              }
+            }
+
+            outputContent.textContent = output || "No matches found.";
+          } catch (err) {
+            console.error(err);
+            outputContent.textContent = `An error occurred: ${err.message}`;
+          }
+        });
+    </script>
+  </body>
+</html>
