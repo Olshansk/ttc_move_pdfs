@@ -1,0 +1,9 @@
+Source: a-file-example_PDF_500_kB.pdf
+Match: a-file-example_PDF_500_kB.pdf
+
+Source: a-file-sample_150kB.pdf
+Match: a-file-sample_150kB.pdf
+
+Source: a-file-example_PDF_1MB.pdf
+Match: a-file-example_PDF_1MB.pdf
+
