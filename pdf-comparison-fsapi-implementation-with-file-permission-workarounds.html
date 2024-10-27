@@ -140,6 +140,16 @@
         }
       }
 
+      async function saveOutputToFile(output, destFolderHandle) {
+        const outputFileHandle = await destFolderHandle.getFileHandle(
+          "output.txt",
+          { create: true }
+        );
+        const writable = await outputFileHandle.createWritable();
+        await writable.write(output);
+        await writable.close();
+      }
+
       document
         .querySelector(".submit-button")
         .addEventListener("click", async (e) => {
@@ -193,6 +203,7 @@
             }
 
             outputContent.textContent = output || "No matches found.";
+            await saveOutputToFile(output, destFolderHandle); // Save output to a file
           } catch (err) {
             console.error(err);
             outputContent.textContent = `An error occurred: ${err.message}`;
