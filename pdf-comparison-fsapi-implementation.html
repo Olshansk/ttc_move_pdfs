@@ -143,6 +143,27 @@
         await sourceFile.remove(); // Delete from the source folder
       }
 
+      function getSequenceMatchRatio(str1, str2) {
+        const len1 = str1.length;
+        const len2 = str2.length;
+        const matrix = Array(len1 + 1)
+          .fill()
+          .map(() => Array(len2 + 1).fill(0));
+
+        for (let i = 1; i <= len1; i++) {
+          for (let j = 1; j <= len2; j++) {
+            if (str1[i - 1] === str2[j - 1]) {
+              matrix[i][j] = matrix[i - 1][j - 1] + 1;
+            } else {
+              matrix[i][j] = Math.max(matrix[i - 1][j], matrix[i][j - 1]);
+            }
+          }
+        }
+
+        const matchingChars = matrix[len1][len2];
+        return (2.0 * matchingChars) / (len1 + len2);
+      }
+
       async function compareAndHandlePdfs(
         sourcePdfs,
         comparePdfs,
@@ -191,6 +212,13 @@
         return matches;
       }
 
+      async function getPdfPageCount(fileHandle) {
+        const file = await fileHandle.getFile();
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        return pdf.numPages;
+      }
+
       document
         .getElementById("folderForm")
         .addEventListener("submit", async function (e) {
@@ -224,9 +252,7 @@
 
             let output = "";
             for (const match of matches) {
-              output += `Source: ${match.source}\n`;
-              output += `Compare: ${match.compare}\n`;
-              output += `Destination: ${match.destination}\n\n`;
+              output += `Source: ${match.source}\nCompare: ${match.compare}\nDestination: ${match.destination}\n\n`;
             }
 
             outputContent.textContent = output || "No matches found.";
