@@ -50,6 +50,12 @@
             Select Destination Folder
           </button>
         </div>
+        <div class="flex items-center">
+          <input id="moveCheckbox" type="checkbox" class="mr-2" />
+          <label for="moveCheckbox" class="text-sm font-medium text-gray-700"
+            >Move files instead of copying</label
+          >
+        </div>
         <button
           type="submit"
           class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -101,27 +107,27 @@
           destFolderHandle = await getDirectoryHandle("destFolder");
         });
 
-      async function getPdfFiles(folderHandle, firstLayerOnly = false) {
+      async function getPdfFilesRecursively(folderHandle) {
         const pdfFiles = [];
 
-        async function collectFiles(handle, depth = 0) {
+        async function traverseDirectory(handle) {
           for await (const entry of handle.values()) {
             if (
               entry.kind === "file" &&
               entry.name.toLowerCase().endsWith(".pdf")
             ) {
               pdfFiles.push(entry);
-            } else if (entry.kind === "directory" && depth === 0) {
-              await collectFiles(entry, depth + 1);
+            } else if (entry.kind === "directory") {
+              await traverseDirectory(entry);
             }
           }
         }
 
-        await collectFiles(folderHandle, firstLayerOnly ? 1 : 0);
+        await traverseDirectory(folderHandle);
         return pdfFiles;
       }
 
-      async function moveFile(sourceFile, destFolderHandle) {
+      async function copyFile(sourceFile, destFolderHandle) {
         const source = await sourceFile.getFile();
         const destFileHandle = await destFolderHandle.getFileHandle(
           sourceFile.name,
@@ -130,13 +136,18 @@
         const writable = await destFileHandle.createWritable();
         await writable.write(source);
         await writable.close();
-        await sourceFile.remove(); // Move by deleting from source after copying
       }
 
-      async function compareAndMovePdfs(
+      async function moveFile(sourceFile, destFolderHandle) {
+        await copyFile(sourceFile, destFolderHandle);
+        await sourceFile.remove(); // Delete from the source folder
+      }
+
+      async function compareAndHandlePdfs(
         sourcePdfs,
         comparePdfs,
-        destFolderHandle
+        destFolderHandle,
+        moveFiles
       ) {
         const matches = [];
         const comparePdfNames = comparePdfs.map(
@@ -162,7 +173,11 @@
             const comparePages = await getPdfPageCount(bestMatch);
 
             if (sourcePages === comparePages) {
-              await moveFile(sourcePdf, destFolderHandle);
+              if (moveFiles) {
+                await moveFile(sourcePdf, destFolderHandle);
+              } else {
+                await copyFile(sourcePdf, destFolderHandle);
+              }
 
               matches.push({
                 source: sourcePdf.name,
@@ -190,17 +205,21 @@
             return;
           }
 
+          const moveFiles = document.getElementById("moveCheckbox").checked;
           const outputContent = document.getElementById("outputContent");
           outputContent.textContent = "Processing...";
 
           try {
-            const sourcePdfs = await getPdfFiles(sourceFolderHandle);
-            const comparePdfs = await getPdfFiles(compareFolderHandle, true);
+            const sourcePdfs = await getPdfFilesRecursively(sourceFolderHandle);
+            const comparePdfs = await getPdfFilesRecursively(
+              compareFolderHandle
+            );
 
-            const matches = await compareAndMovePdfs(
+            const matches = await compareAndHandlePdfs(
               sourcePdfs,
               comparePdfs,
-              destFolderHandle
+              destFolderHandle,
+              moveFiles
             );
 
             let output = "";
